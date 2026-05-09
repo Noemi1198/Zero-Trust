@@ -1,0 +1,64 @@
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: zta_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password_super_sicura
+    ports:
+      - "27017:27017"
+    networks:
+      - zta_network
+
+  envoy:
+    image: envoyproxy/envoy:v1.27-latest
+    container_name: zta_envoy
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml 
+    ports:
+      - "10000:10000"
+    depends_on:
+      - mongodb
+      - opa
+    networks:
+      - zta_network
+
+  opa:
+    image: openpolicyagent/opa:latest-envoy
+    container_name: zta_opa
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--set=plugins.envoy_ext_authz_grpc.addr=:9191"
+      - "--set=plugins.envoy_ext_authz_grpc.path=envoy/authz/allow"
+      - "--set=decision_logs.console=true"
+      - "/etc/opa/policy.rego"
+    volumes:
+      - ./policy.rego:/etc/opa/policy.rego
+    networks:
+      - zta_network
+
+  client:
+    image: ubuntu:latest
+    container_name: zta_client
+    command: tail -f /dev/null
+    networks:
+      - zta_network
+
+  splunk:
+    image: splunk/splunk:8.2.12
+    container_name: zta_splunk
+    environment:
+      - SPLUNK_START_ARGS=--accept-license
+      - SPLUNK_PASSWORD=password_splunk_2026
+    ports:
+      - "8000:8000"
+      - "8089:8089"
+      - "8088:8088"
+    networks:
+      - zta_network
+
+networks:
+  zta_network:
+    driver: bridge
